@@ -4,6 +4,7 @@ import { AppShell } from "@/components/layout/AppShell"
 import { Sidebar } from "@/components/layout/Sidebar"
 import { TopBar } from "@/components/layout/TopBar"
 import { StatusBar } from "@/components/layout/StatusBar"
+import { ThemePicker } from "@/components/theme/ThemePicker"
 import { loadThemeState, saveThemeState, rotateTheme } from "@/lib/theme-rotation"
 import type { Theme, ThemeState, SessionInfo } from "@/types"
 import themeCatalog from "../themes/theme-catalog.json"
@@ -39,9 +40,6 @@ function App() {
     // Will be wired to backend in Task 7
     handleRotate()
   }, [handleRotate])
-
-  // Suppress unused variable warning
-  void themePickerOpen
 
   return (
     <ThemeProvider
@@ -88,6 +86,7 @@ function App() {
           </div>
         </div>
       </AppShell>
+      <ThemePicker open={themePickerOpen} onOpenChange={setThemePickerOpen} />
     </ThemeProvider>
   )
 }
