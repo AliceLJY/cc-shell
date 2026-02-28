@@ -125,16 +125,11 @@
     }
 }
 
-/* Smooth theme transitions */
-* {
+/* Smooth theme transitions — only on layout elements, not everything */
+[data-theme-transition] {
   transition-property: background-color, border-color, color;
   transition-duration: 0.2s;
   transition-timing-function: ease-in-out;
-}
-
-/* Override for elements that shouldn't transition */
-textarea, input, pre, code {
-  transition: none;
 }
 
 /* Prose overrides for theme colors */

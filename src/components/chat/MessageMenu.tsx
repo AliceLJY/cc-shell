@@ -16,12 +16,21 @@ export function MessageMenu({ content }: MessageMenuProps) {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(content)
+    // Copy as plain text — strip markdown syntax
+    const plain = content
+      .replace(/```[\s\S]*?```/g, (m) => m.replace(/```\w*\n?/g, "").replace(/```/g, ""))
+      .replace(/\*\*(.*?)\*\*/g, "$1")
+      .replace(/\*(.*?)\*/g, "$1")
+      .replace(/`(.*?)`/g, "$1")
+      .replace(/^#{1,6}\s+/gm, "")
+      .replace(/^\s*[-*+]\s+/gm, "- ")
+    navigator.clipboard.writeText(plain.trim())
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
 
   const handleCopyMarkdown = () => {
+    // Copy raw markdown as-is
     navigator.clipboard.writeText(content)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)

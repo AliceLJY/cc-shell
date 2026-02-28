@@ -30,11 +30,11 @@ function extractText(children: React.ReactNode): string {
 export function AssistantBubble({ message }: AssistantBubbleProps) {
   return (
     <div className="flex justify-start mb-4 px-4 group">
-      <div className="flex items-start gap-1">
+      <div className="flex items-start gap-1 max-w-[80%]">
         <div
           data-message-bubble
           data-raw-content={message.content}
-          className="max-w-[80%] px-4 py-3 prose prose-sm dark:prose-invert max-w-none"
+          className="px-4 py-3 prose prose-sm dark:prose-invert prose-max-w-none"
           style={{
             backgroundColor: "var(--theme-aiBubble)",
             color: "var(--theme-aiText)",

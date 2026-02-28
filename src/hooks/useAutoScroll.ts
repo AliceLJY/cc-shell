@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback, useState } from "react"
 
-export function useAutoScroll(deps: unknown[]) {
+export function useAutoScroll(triggerValue: unknown) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [isAtBottom, setIsAtBottom] = useState(true)
 
@@ -21,8 +21,7 @@ export function useAutoScroll(deps: unknown[]) {
     if (isAtBottom) {
       scrollToBottom()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps)
+  }, [triggerValue, isAtBottom, scrollToBottom])
 
   return { scrollRef, isAtBottom, scrollToBottom, handleScroll }
 }

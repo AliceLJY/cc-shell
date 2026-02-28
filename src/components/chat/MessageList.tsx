@@ -14,7 +14,9 @@ interface MessageListProps {
 }
 
 export function MessageList({ messages, streamingText, isStreaming, pendingPermissions, onRespondPermission }: MessageListProps) {
-  const { scrollRef, handleScroll } = useAutoScroll([messages, streamingText, pendingPermissions])
+  // Use a composite trigger: message count + streaming text length + permissions count
+  const scrollTrigger = `${messages.length}:${streamingText.length}:${pendingPermissions.length}`
+  const { scrollRef, handleScroll } = useAutoScroll(scrollTrigger)
 
   return (
     <div
