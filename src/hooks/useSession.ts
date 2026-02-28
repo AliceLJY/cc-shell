@@ -84,6 +84,15 @@ export function useSession(sessionId: string | null, onSessionCreated?: (id: str
 
   const handleSSEEvent = useCallback((event: SSEEvent) => {
     switch (event.type) {
+      case "system_init": {
+        // Update session ID to the real SDK session ID
+        const realId = (event as unknown as { sessionId: string }).sessionId
+        if (realId && realId !== sessionIdRef.current) {
+          sessionIdRef.current = realId
+          onSessionCreated?.(realId)
+        }
+        break
+      }
       case "text_delta":
         dispatch({ type: "text_delta", text: event.text })
         break
@@ -100,7 +109,7 @@ export function useSession(sessionId: string | null, onSessionCreated?: (id: str
         dispatch({ type: "stop_streaming" })
         break
     }
-  }, [])
+  }, [onSessionCreated])
 
   const { connected } = useSSE({ sessionId, onEvent: handleSSEEvent })
 

@@ -7,13 +7,24 @@ interface ActiveSession {
   pendingPermissions: Map<string, (result: { behavior: "allow" | "deny"; message?: string }) => void>
   isProcessing: boolean
   model: string
+  eventBuffer: Uint8Array[] // Buffer events until first SSE controller connects
 }
 
 const activeSessions = new Map<string, ActiveSession>()
 
+// Remove CLAUDECODE env var to prevent nested session detection
+// (CC Shell backend may be launched from within a Claude Code session)
+const cleanEnv: Record<string, string | undefined> = { ...process.env }
+delete cleanEnv.CLAUDECODE
+
 function sendSSE(session: ActiveSession, event: string, data: unknown) {
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
   const encoded = new TextEncoder().encode(payload)
+  if (session.sseControllers.size === 0) {
+    // No SSE clients connected yet — buffer the event
+    session.eventBuffer.push(encoded)
+    return
+  }
   for (const controller of session.sseControllers) {
     try {
       controller.enqueue(encoded)
@@ -21,6 +32,17 @@ function sendSSE(session: ActiveSession, event: string, data: unknown) {
       session.sseControllers.delete(controller)
     }
   }
+}
+
+function flushEventBuffer(session: ActiveSession, controller: ReadableStreamDefaultController) {
+  for (const encoded of session.eventBuffer) {
+    try {
+      controller.enqueue(encoded)
+    } catch {
+      break
+    }
+  }
+  session.eventBuffer = []
 }
 
 // Process a query and stream results via SSE
@@ -33,6 +55,7 @@ async function processQuery(session: ActiveSession, prompt: string, resumeId?: s
       prompt,
       options: {
         model: session.model,
+        env: cleanEnv,
         ...(resumeId ? { resume: resumeId } : {}),
         includePartialMessages: true,
         permissionMode: "default",
@@ -55,17 +78,18 @@ async function processQuery(session: ActiveSession, prompt: string, resumeId?: s
       },
     })
 
-    let resolvedSessionId = session.sessionId
+    let sdkSessionResolved = false
 
     for await (const msg of q) {
-      // Capture session ID from any message
-      if (msg.session_id && !resolvedSessionId) {
-        resolvedSessionId = msg.session_id
-        // If this is the first query (no resumeId), register with the real ID
+      // Capture real session ID from SDK messages (first time only)
+      if (msg.session_id && !sdkSessionResolved) {
+        sdkSessionResolved = true
+        const resolvedSessionId = msg.session_id
+        // Register with the real SDK session ID (keep old tempId as alias)
         if (!resumeId && resolvedSessionId !== session.sessionId) {
-          activeSessions.delete(session.sessionId)
           session.sessionId = resolvedSessionId
           activeSessions.set(resolvedSessionId, session)
+          // Don't delete tempId — frontend may still reference it
         }
         sendSSE(session, "system_init", {
           type: "system_init",
@@ -245,6 +269,7 @@ const server = Bun.serve({
         pendingPermissions: new Map(),
         isProcessing: false,
         model,
+        eventBuffer: [],
       }
       activeSessions.set(tempId, session)
 
@@ -271,6 +296,8 @@ const server = Bun.serve({
       const stream = new ReadableStream({
         start(controller) {
           session.sseControllers.add(controller)
+          // Flush any buffered events from before SSE connected
+          flushEventBuffer(session, controller)
           // Send current state
           const payload = `event: system_init\ndata: ${JSON.stringify({
             type: "system_init",
