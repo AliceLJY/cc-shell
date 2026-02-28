@@ -1,0 +1,140 @@
+[
+  {
+    "id": 1,
+    "name": "深海墨蓝",
+    "nameEn": "Deep Ocean",
+    "mood": "沉静专注",
+    "category": "暗色系",
+    "colors": {
+      "bg": "#0a1628",
+      "surface": "#111d33",
+      "userBubble": "#1a3a5c",
+      "userText": "#e0ecf8",
+      "aiBubble": "#162640",
+      "aiText": "#c8ddf0",
+      "accent": "#38bdf8",
+      "sidebar": "#0d1a2d",
+      "input": "#132236",
+      "border": "#1e3451",
+      "muted": "#64879e"
+    },
+    "font": "'Inter', system-ui, sans-serif",
+    "borderRadius": "12px",
+    "bubbleStyle": "rounded"
+  },
+  {
+    "id": 2,
+    "name": "暖杏拿铁",
+    "nameEn": "Apricot Latte",
+    "mood": "温暖放松",
+    "category": "亮色系",
+    "colors": {
+      "bg": "#fdf6ee",
+      "surface": "#fff8f0",
+      "userBubble": "#e8740e",
+      "userText": "#ffffff",
+      "aiBubble": "#f5ebe0",
+      "aiText": "#3d2c1e",
+      "accent": "#d4620a",
+      "sidebar": "#f9f0e3",
+      "input": "#ffffff",
+      "border": "#e6d5c3",
+      "muted": "#9a8575"
+    },
+    "font": "'Inter', system-ui, sans-serif",
+    "borderRadius": "16px",
+    "bubbleStyle": "rounded"
+  },
+  {
+    "id": 3,
+    "name": "霓虹终端",
+    "nameEn": "Neon Terminal",
+    "mood": "极客模式",
+    "category": "暗色系",
+    "colors": {
+      "bg": "#0a0a0a",
+      "surface": "#111111",
+      "userBubble": "#1a2e1a",
+      "userText": "#4ade80",
+      "aiBubble": "#141414",
+      "aiText": "#22c55e",
+      "accent": "#22c55e",
+      "sidebar": "#0d0d0d",
+      "input": "#1a1a1a",
+      "border": "#1e3a1e",
+      "muted": "#4a7a4a"
+    },
+    "font": "'JetBrains Mono', 'Fira Code', monospace",
+    "borderRadius": "4px",
+    "bubbleStyle": "sharp"
+  },
+  {
+    "id": 4,
+    "name": "竹林清风",
+    "nameEn": "Bamboo Breeze",
+    "mood": "自然清新",
+    "category": "亮色系",
+    "colors": {
+      "bg": "#f0f7f0",
+      "surface": "#f8fcf8",
+      "userBubble": "#16a34a",
+      "userText": "#ffffff",
+      "aiBubble": "#e8f5e8",
+      "aiText": "#1a3a2a",
+      "accent": "#059669",
+      "sidebar": "#e8f0e8",
+      "input": "#ffffff",
+      "border": "#c8e0c8",
+      "muted": "#6b8f6b"
+    },
+    "font": "'Inter', system-ui, sans-serif",
+    "borderRadius": "14px",
+    "bubbleStyle": "rounded"
+  },
+  {
+    "id": 5,
+    "name": "星空紫罗兰",
+    "nameEn": "Violet Cosmos",
+    "mood": "梦幻灵感",
+    "category": "暗色系",
+    "colors": {
+      "bg": "#0e0a1a",
+      "surface": "#150f24",
+      "userBubble": "#4c1d95",
+      "userText": "#e8d5f5",
+      "aiBubble": "#1a1030",
+      "aiText": "#d4b8f0",
+      "accent": "#a855f7",
+      "sidebar": "#110c1e",
+      "input": "#1a1230",
+      "border": "#2e1f4d",
+      "muted": "#7c5faa"
+    },
+    "font": "'Inter', system-ui, sans-serif",
+    "borderRadius": "12px",
+    "bubbleStyle": "rounded"
+  },
+  {
+    "id": 6,
+    "name": "纸墨素笺",
+    "nameEn": "Ink & Paper",
+    "mood": "简约素雅",
+    "category": "亮色系",
+    "colors": {
+      "bg": "#fafafa",
+      "surface": "#ffffff",
+      "userBubble": "#2c2c2c",
+      "userText": "#fafafa",
+      "aiBubble": "#f0f0f0",
+      "aiText": "#1a1a1a",
+      "accent": "#404040",
+      "sidebar": "#f5f5f5",
+      "input": "#ffffff",
+      "border": "#e0e0e0",
+      "muted": "#888888"
+    },
+    "font": "'Noto Serif SC', 'Georgia', serif",
+    "borderRadius": "8px",
+    "bubbleStyle": "minimal"
+  }
+]
