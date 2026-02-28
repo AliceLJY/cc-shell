@@ -23,14 +23,19 @@ function App() {
   // "pending" = user clicked New Chat but hasn't sent first message yet
   const [pendingNewChat, setPendingNewChat] = useState(false)
 
-  const handleSessionCreated = useCallback((newId: string) => {
-    setActiveSessionId(newId)
-    setPendingNewChat(false)
-    // Refresh session list
+  const refreshSessions = useCallback(() => {
     api.fetchSessions().then(setSessions).catch(() => {})
   }, [])
 
-  const session = useSession(activeSessionId, handleSessionCreated)
+  const handleSessionCreated = useCallback((newId: string) => {
+    setActiveSessionId(newId)
+    setPendingNewChat(false)
+  }, [])
+
+  const session = useSession(activeSessionId, {
+    onSessionCreated: handleSessionCreated,
+    onQueryComplete: refreshSessions,
+  })
   const currentTheme = themes.find((t) => t.id === themeState.currentThemeId) || themes[0]
 
   // Load sessions on mount

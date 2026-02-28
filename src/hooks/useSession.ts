@@ -79,7 +79,14 @@ const initialState: SessionState = {
   pendingPermissions: [],
 }
 
-export function useSession(sessionId: string | null, onSessionCreated?: (id: string) => void) {
+interface UseSessionCallbacks {
+  onSessionCreated?: (id: string) => void
+  onQueryComplete?: () => void
+}
+
+export function useSession(sessionId: string | null, callbacks?: UseSessionCallbacks) {
+  const onSessionCreated = callbacks?.onSessionCreated
+  const onQueryComplete = callbacks?.onQueryComplete
   const [state, dispatch] = useReducer(sessionReducer, initialState)
   const [model, setModel] = useState("claude-sonnet-4-6")
   const sessionIdRef = useRef(sessionId)
@@ -121,12 +128,13 @@ export function useSession(sessionId: string | null, onSessionCreated?: (id: str
         break
       case "result":
         dispatch({ type: "result", usage: event.usage, cost: event.cost, duration: event.duration })
+        onQueryComplete?.()
         break
       case "error":
         dispatch({ type: "stop_streaming" })
         break
     }
-  }, [onSessionCreated])
+  }, [onSessionCreated, onQueryComplete])
 
   const { connected } = useSSE({ sessionId, onEvent: handleSSEEvent })
 
