@@ -1,4 +1,4 @@
-import { useReducer, useCallback, useState, useRef } from "react"
+import { useReducer, useCallback, useState, useRef, useEffect } from "react"
 import { useSSE } from "./useSSE"
 import * as api from "@/lib/api"
 import type { ChatMessage, SSEEvent, TokenUsage, PermissionRequest } from "@/types"
@@ -22,6 +22,7 @@ type SessionAction =
   | { type: "result"; usage: TokenUsage; cost: number; duration: number }
   | { type: "permission_request"; request: PermissionRequest }
   | { type: "permission_resolved"; requestId: string }
+  | { type: "load_messages"; messages: ChatMessage[] }
   | { type: "clear" }
 
 function sessionReducer(state: SessionState, action: SessionAction): SessionState {
@@ -59,6 +60,8 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
         ...state,
         pendingPermissions: state.pendingPermissions.filter((p) => p.requestId !== action.requestId),
       }
+    case "load_messages":
+      return { ...state, messages: action.messages }
     case "clear":
       return initialState
     default:
@@ -81,6 +84,20 @@ export function useSession(sessionId: string | null, onSessionCreated?: (id: str
   const [model, setModel] = useState("claude-sonnet-4-6")
   const sessionIdRef = useRef(sessionId)
   sessionIdRef.current = sessionId
+
+  // Load historical messages when switching to a session
+  useEffect(() => {
+    if (!sessionId) return
+    let cancelled = false
+    api.fetchMessages(sessionId).then((msgs) => {
+      if (!cancelled && msgs.length > 0) {
+        dispatch({ type: "load_messages", messages: msgs })
+      }
+    }).catch(() => {
+      // Session may not have messages yet (new session)
+    })
+    return () => { cancelled = true }
+  }, [sessionId])
 
   const handleSSEEvent = useCallback((event: SSEEvent) => {
     switch (event.type) {

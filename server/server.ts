@@ -1,4 +1,4 @@
-import { query, listSessions } from "@anthropic-ai/claude-agent-sdk"
+import { query, listSessions, getSessionMessages } from "@anthropic-ai/claude-agent-sdk"
 
 // Each session tracks SSE connections and pending permissions
 interface ActiveSession {
@@ -286,6 +286,43 @@ const server = Bun.serve({
     }
 
     const session = activeSessions.get(sessionId)
+
+    // GET /api/sessions/:id/messages — load historical messages
+    if (pathname.endsWith("/messages") && method === "GET") {
+      try {
+        const msgs = await getSessionMessages(sessionId)
+        const result = msgs.map((m) => {
+          let content = ""
+          const toolCalls: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
+
+          const raw = m.message as { content?: unknown; role?: string }
+          if (typeof raw.content === "string") {
+            content = raw.content
+          } else if (Array.isArray(raw.content)) {
+            for (const block of raw.content) {
+              if (block.type === "text") content += block.text
+              else if (block.type === "tool_use") {
+                toolCalls.push({ id: block.id, name: block.name, input: block.input })
+              }
+            }
+          }
+
+          return {
+            id: m.uuid,
+            role: m.type as "user" | "assistant",
+            content,
+            timestamp: 0, // SDK doesn't provide timestamps
+            toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+          }
+        })
+        return Response.json(result, { headers: corsHeaders })
+      } catch (err) {
+        return Response.json(
+          { error: err instanceof Error ? err.message : "Failed to load messages" },
+          { status: 500, headers: corsHeaders }
+        )
+      }
+    }
 
     // GET /api/sessions/:id/stream — SSE endpoint
     if (pathname.endsWith("/stream") && method === "GET") {

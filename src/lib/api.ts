@@ -1,4 +1,4 @@
-import type { SessionInfo } from "@/types"
+import type { SessionInfo, ChatMessage } from "@/types"
 
 const BASE = "/api"
 
@@ -37,6 +37,10 @@ export async function respondPermission(sessionId: string, requestId: string, al
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ requestId, allow }),
   })
+}
+
+export async function fetchMessages(sessionId: string): Promise<ChatMessage[]> {
+  return jsonFetch(`${BASE}/sessions/${sessionId}/messages`)
 }
 
 export async function stopSession(sessionId: string): Promise<void> {
