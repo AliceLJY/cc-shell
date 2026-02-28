@@ -1,6 +1,9 @@
+import { Children, isValidElement } from "react"
 import Markdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import rehypeRaw from "rehype-raw"
+import { CodeBlock } from "./CodeBlock"
+import { ToolCall } from "./ToolCall"
 import type { ChatMessage } from "@/types"
 
 interface AssistantBubbleProps {
@@ -9,6 +12,18 @@ interface AssistantBubbleProps {
 
 function formatTime(ts: number): string {
   return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+}
+
+function extractText(children: React.ReactNode): string {
+  const parts: string[] = []
+  Children.forEach(children, (child) => {
+    if (typeof child === "string") {
+      parts.push(child)
+    } else if (isValidElement(child) && child.props?.children) {
+      parts.push(extractText(child.props.children))
+    }
+  })
+  return parts.join("")
 }
 
 export function AssistantBubble({ message }: AssistantBubbleProps) {
@@ -44,25 +59,10 @@ export function AssistantBubble({ message }: AssistantBubbleProps) {
                   </code>
                 )
               }
-              // Block code — will be enhanced with CodeBlock in Task 8
+              const codeStr = extractText(children)
               return (
-                <div className="relative my-2 not-prose">
-                  <div
-                    className="text-xs px-3 py-1 font-mono"
-                    style={{ color: "var(--theme-muted)", borderBottom: "1px solid var(--theme-border)" }}
-                  >
-                    {match[1]}
-                  </div>
-                  <pre
-                    className="p-3 overflow-x-auto text-sm"
-                    style={{
-                      backgroundColor: "var(--theme-bg)",
-                      borderRadius: "var(--theme-radius)",
-                      border: "1px solid var(--theme-border)",
-                    }}
-                  >
-                    <code style={{ color: "var(--theme-aiText)" }}>{children}</code>
-                  </pre>
+                <div className="not-prose">
+                  <CodeBlock code={codeStr} language={match[1]} />
                 </div>
               )
             },
@@ -71,18 +71,10 @@ export function AssistantBubble({ message }: AssistantBubbleProps) {
           {message.content}
         </Markdown>
 
-        {/* Tool call placeholders */}
+        {/* Tool call cards */}
         {message.toolCalls?.map((tc) => (
-          <div
-            key={tc.id}
-            className="mt-2 px-3 py-2 rounded text-xs not-prose"
-            style={{
-              backgroundColor: "var(--theme-surface)",
-              border: "1px solid var(--theme-border)",
-              color: "var(--theme-muted)",
-            }}
-          >
-            {tc.name}: {JSON.stringify(tc.input).slice(0, 100)}
+          <div key={tc.id} className="not-prose">
+            <ToolCall toolCall={tc} />
           </div>
         ))}
 
