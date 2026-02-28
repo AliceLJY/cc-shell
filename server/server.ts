@@ -1,30 +1,79 @@
 import { query, listSessions } from "@anthropic-ai/claude-agent-sdk"
-import type { Query } from "@anthropic-ai/claude-agent-sdk"
 
-// Active sessions: sessionId -> { query, sseControllers, pendingPermissions }
+// Each session tracks SSE connections and pending permissions
 interface ActiveSession {
-  query: Query
+  sessionId: string
   sseControllers: Set<ReadableStreamDefaultController>
-  pendingPermissions: Map<string, (result: { behavior: "allow" | "deny" }) => void>
-  abortController: AbortController
+  pendingPermissions: Map<string, (result: { behavior: "allow" | "deny"; message?: string }) => void>
+  isProcessing: boolean
+  model: string
 }
 
 const activeSessions = new Map<string, ActiveSession>()
 
 function sendSSE(session: ActiveSession, event: string, data: unknown) {
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
+  const encoded = new TextEncoder().encode(payload)
   for (const controller of session.sseControllers) {
     try {
-      controller.enqueue(new TextEncoder().encode(payload))
+      controller.enqueue(encoded)
     } catch {
       session.sseControllers.delete(controller)
     }
   }
 }
 
-async function startSessionLoop(sessionId: string, session: ActiveSession) {
+// Process a query and stream results via SSE
+async function processQuery(session: ActiveSession, prompt: string, resumeId?: string) {
+  session.isProcessing = true
+  sendSSE(session, "status", { type: "status", text: "Claude is thinking..." })
+
   try {
-    for await (const msg of session.query) {
+    const q = query({
+      prompt,
+      options: {
+        model: session.model,
+        ...(resumeId ? { resume: resumeId } : {}),
+        includePartialMessages: true,
+        permissionMode: "default",
+        canUseTool: async (toolName, input, opts) => {
+          const requestId = opts.toolUseID
+          return new Promise((resolve) => {
+            // Store resolver — will be resolved when frontend responds
+            session.pendingPermissions.set(requestId, resolve)
+            sendSSE(session, "permission_request", {
+              type: "permission_request",
+              request: {
+                requestId,
+                toolName,
+                toolInput: input,
+                description: `${toolName}: ${JSON.stringify(input).slice(0, 200)}`,
+              },
+            })
+          })
+        },
+      },
+    })
+
+    let resolvedSessionId = session.sessionId
+
+    for await (const msg of q) {
+      // Capture session ID from any message
+      if (msg.session_id && !resolvedSessionId) {
+        resolvedSessionId = msg.session_id
+        // If this is the first query (no resumeId), register with the real ID
+        if (!resumeId && resolvedSessionId !== session.sessionId) {
+          activeSessions.delete(session.sessionId)
+          session.sessionId = resolvedSessionId
+          activeSessions.set(resolvedSessionId, session)
+        }
+        sendSSE(session, "system_init", {
+          type: "system_init",
+          sessionId: resolvedSessionId,
+          model: session.model,
+        })
+      }
+
       switch (msg.type) {
         case "assistant": {
           const content = msg.message?.content
@@ -45,6 +94,7 @@ async function startSessionLoop(sessionId: string, session: ActiveSession) {
           } else if (typeof content === "string") {
             text = content
           }
+
           sendSSE(session, "assistant_message", {
             type: "assistant_message",
             message: {
@@ -52,7 +102,7 @@ async function startSessionLoop(sessionId: string, session: ActiveSession) {
               role: "assistant",
               content: text,
               timestamp: Date.now(),
-              toolCalls,
+              toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
               model: msg.message?.model,
             },
           })
@@ -74,22 +124,32 @@ async function startSessionLoop(sessionId: string, session: ActiveSession) {
         }
 
         case "result": {
+          // Map snake_case SDK fields to camelCase frontend fields
           const resultMsg = msg as Record<string, unknown>
+          const sdkUsage = (resultMsg.usage ?? {}) as Record<string, number>
           sendSSE(session, "result", {
             type: "result",
-            cost: resultMsg.total_cost_usd ?? 0,
-            usage: resultMsg.usage ?? { inputTokens: 0, outputTokens: 0 },
-            duration: resultMsg.duration_ms ?? 0,
+            cost: typeof resultMsg.total_cost_usd === "number" ? resultMsg.total_cost_usd : 0,
+            usage: {
+              inputTokens: sdkUsage.input_tokens ?? 0,
+              outputTokens: sdkUsage.output_tokens ?? 0,
+              cacheReadTokens: sdkUsage.cache_read_input_tokens ?? 0,
+            },
+            duration: typeof resultMsg.duration_ms === "number" ? resultMsg.duration_ms : 0,
           })
           break
         }
 
         case "system": {
+          // SDKSystemMessage has subtype, model, cwd, tools — not a "message" field
           const sysMsg = msg as Record<string, unknown>
-          sendSSE(session, "status", {
-            type: "status",
-            text: typeof sysMsg.message === "string" ? sysMsg.message : "system event",
-          })
+          const subtype = sysMsg.subtype as string | undefined
+          if (subtype === "init") {
+            sendSSE(session, "status", {
+              type: "status",
+              text: `Session initialized (model: ${sysMsg.model ?? session.model}, cwd: ${sysMsg.cwd ?? "unknown"})`,
+            })
+          }
           break
         }
 
@@ -100,6 +160,8 @@ async function startSessionLoop(sessionId: string, session: ActiveSession) {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error"
     sendSSE(session, "error", { type: "error", message })
+  } finally {
+    session.isProcessing = false
   }
 }
 
@@ -116,19 +178,18 @@ async function readBody(req: Request): Promise<Record<string, unknown>> {
   }
 }
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+}
+
 const server = Bun.serve({
   port: 3001,
   fetch: async (req) => {
     const url = new URL(req.url)
     const { pathname } = url
     const method = req.method
-
-    // CORS headers
-    const corsHeaders = {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-    }
 
     if (method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders })
@@ -167,71 +228,30 @@ const server = Bun.serve({
       }
     }
 
-    // POST /api/sessions — create new session
+    // POST /api/sessions — create new session with first message
     if (pathname === "/api/sessions" && method === "POST") {
       const body = await readBody(req)
       const model = (body.model as string) || "claude-sonnet-4-6"
-      const prompt = (body.prompt as string) || ""
-
-      const abortController = new AbortController()
-      const pendingPermissions = new Map<string, (result: { behavior: "allow" | "deny" }) => void>()
-
-      const q = query({
-        prompt: prompt || "Hello",
-        options: {
-          model,
-          includePartialMessages: true,
-          abortController,
-          permissionMode: "default",
-          canUseTool: async (toolName, input, opts) => {
-            const requestId = opts.toolUseID
-            return new Promise((resolve) => {
-              // Store resolver so frontend can respond
-              const sessionId = q.initializationResult().then((r) => r.sessionId).catch(() => "unknown")
-              sessionId.then((sid) => {
-                const session = activeSessions.get(sid)
-                if (session) {
-                  session.pendingPermissions.set(requestId, resolve as (result: { behavior: "allow" | "deny" }) => void)
-                  sendSSE(session, "permission_request", {
-                    type: "permission_request",
-                    request: {
-                      requestId,
-                      toolName,
-                      toolInput: input,
-                      description: `${toolName}: ${JSON.stringify(input).slice(0, 200)}`,
-                    },
-                  })
-                }
-              })
-            })
-          },
-        },
-      })
-
-      // Get session ID from initialization
-      let sessionId: string
-      try {
-        const initResult = await q.initializationResult()
-        sessionId = initResult.sessionId
-      } catch (err) {
-        return Response.json(
-          { error: err instanceof Error ? err.message : "Failed to initialize session" },
-          { status: 500, headers: corsHeaders }
-        )
+      const prompt = body.prompt as string
+      if (!prompt) {
+        return Response.json({ error: "prompt required" }, { status: 400, headers: corsHeaders })
       }
 
+      // Use a temp ID until we get the real one from SDK
+      const tempId = crypto.randomUUID()
       const session: ActiveSession = {
-        query: q,
+        sessionId: tempId,
         sseControllers: new Set(),
-        pendingPermissions,
-        abortController,
+        pendingPermissions: new Map(),
+        isProcessing: false,
+        model,
       }
-      activeSessions.set(sessionId, session)
+      activeSessions.set(tempId, session)
 
-      // Start processing loop in background
-      startSessionLoop(sessionId, session)
+      // Start processing in background — session ID will be resolved from stream
+      processQuery(session, prompt)
 
-      return Response.json({ sessionId, model }, { headers: corsHeaders })
+      return Response.json({ sessionId: tempId, model }, { headers: corsHeaders })
     }
 
     // Routes with session ID
@@ -240,9 +260,10 @@ const server = Bun.serve({
       return new Response("Not found", { status: 404, headers: corsHeaders })
     }
 
+    const session = activeSessions.get(sessionId)
+
     // GET /api/sessions/:id/stream — SSE endpoint
-    if (pathname === `/api/sessions/${sessionId}/stream` && method === "GET") {
-      const session = activeSessions.get(sessionId)
+    if (pathname.endsWith("/stream") && method === "GET") {
       if (!session) {
         return new Response("Session not found", { status: 404, headers: corsHeaders })
       }
@@ -250,16 +271,16 @@ const server = Bun.serve({
       const stream = new ReadableStream({
         start(controller) {
           session.sseControllers.add(controller)
-          // Send init event
-          const payload = `event: system_init\ndata: ${JSON.stringify({ type: "system_init", sessionId })}\n\n`
+          // Send current state
+          const payload = `event: system_init\ndata: ${JSON.stringify({
+            type: "system_init",
+            sessionId: session.sessionId,
+            model: session.model,
+          })}\n\n`
           controller.enqueue(new TextEncoder().encode(payload))
         },
-        cancel() {
-          // Client disconnected
-          const session = activeSessions.get(sessionId)
-          if (session) {
-            // Controller will be cleaned up on next send attempt
-          }
+        cancel(controller) {
+          session.sseControllers.delete(controller as ReadableStreamDefaultController)
         },
       })
 
@@ -273,11 +294,16 @@ const server = Bun.serve({
       })
     }
 
-    // POST /api/sessions/:id/msg — send message
-    if (pathname === `/api/sessions/${sessionId}/msg` && method === "POST") {
-      const session = activeSessions.get(sessionId)
+    // POST /api/sessions/:id/msg — send follow-up message
+    if (pathname.endsWith("/msg") && method === "POST") {
       if (!session) {
         return new Response("Session not found", { status: 404, headers: corsHeaders })
+      }
+      if (session.isProcessing) {
+        return Response.json(
+          { error: "Session is busy processing a previous message" },
+          { status: 409, headers: corsHeaders }
+        )
       }
 
       const body = await readBody(req)
@@ -286,29 +312,19 @@ const server = Bun.serve({
         return Response.json({ error: "content required" }, { status: 400, headers: corsHeaders })
       }
 
-      try {
-        // Use streamInput to send follow-up messages
-        async function* userMessage() {
-          yield {
-            type: "user" as const,
-            message: { role: "user" as const, content },
-            session_id: sessionId!,
-            uuid: crypto.randomUUID(),
-          }
-        }
-        await session.query.streamInput(userMessage())
-        return Response.json({ ok: true }, { headers: corsHeaders })
-      } catch (err) {
-        return Response.json(
-          { error: err instanceof Error ? err.message : "Failed to send message" },
-          { status: 500, headers: corsHeaders }
-        )
+      // Update model if provided
+      if (body.model) {
+        session.model = body.model as string
       }
+
+      // Start a new query with resume to continue the conversation
+      processQuery(session, content, session.sessionId)
+
+      return Response.json({ ok: true }, { headers: corsHeaders })
     }
 
     // POST /api/sessions/:id/permission — resolve permission
-    if (pathname === `/api/sessions/${sessionId}/permission` && method === "POST") {
-      const session = activeSessions.get(sessionId)
+    if (pathname.endsWith("/permission") && method === "POST") {
       if (!session) {
         return new Response("Session not found", { status: 404, headers: corsHeaders })
       }
@@ -322,22 +338,24 @@ const server = Bun.serve({
         return Response.json({ error: "No pending permission" }, { status: 404, headers: corsHeaders })
       }
 
-      resolver({ behavior: allow ? "allow" : "deny" })
+      if (allow) {
+        resolver({ behavior: "allow" })
+      } else {
+        resolver({ behavior: "deny", message: "User denied this action" })
+      }
       session.pendingPermissions.delete(requestId)
       return Response.json({ ok: true }, { headers: corsHeaders })
     }
 
-    // POST /api/sessions/:id/stop — stop session
-    if (pathname === `/api/sessions/${sessionId}/stop` && method === "POST") {
-      const session = activeSessions.get(sessionId)
+    // POST /api/sessions/:id/stop — stop processing
+    if (pathname.endsWith("/stop") && method === "POST") {
       if (!session) {
         return new Response("Session not found", { status: 404, headers: corsHeaders })
       }
-
-      try {
-        session.query.close()
-      } catch {
-        // Already closed
+      // Close all pending permissions with deny to unblock the query
+      for (const [id, resolver] of session.pendingPermissions) {
+        resolver({ behavior: "deny", message: "Session stopped by user" })
+        session.pendingPermissions.delete(id)
       }
       return Response.json({ ok: true }, { headers: corsHeaders })
     }

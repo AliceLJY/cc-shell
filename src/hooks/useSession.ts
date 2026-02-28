@@ -1,4 +1,4 @@
-import { useReducer, useCallback, useState } from "react"
+import { useReducer, useCallback, useState, useRef } from "react"
 import { useSSE } from "./useSSE"
 import * as api from "@/lib/api"
 import type { ChatMessage, SSEEvent, TokenUsage, PermissionRequest } from "@/types"
@@ -76,9 +76,11 @@ const initialState: SessionState = {
   pendingPermissions: [],
 }
 
-export function useSession(sessionId: string | null) {
+export function useSession(sessionId: string | null, onSessionCreated?: (id: string) => void) {
   const [state, dispatch] = useReducer(sessionReducer, initialState)
   const [model, setModel] = useState("claude-sonnet-4-6")
+  const sessionIdRef = useRef(sessionId)
+  sessionIdRef.current = sessionId
 
   const handleSSEEvent = useCallback((event: SSEEvent) => {
     switch (event.type) {
@@ -104,7 +106,6 @@ export function useSession(sessionId: string | null) {
 
   const sendMessage = useCallback(
     async (content: string) => {
-      if (!sessionId) return
       const userMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: "user",
@@ -112,25 +113,46 @@ export function useSession(sessionId: string | null) {
         timestamp: Date.now(),
       }
       dispatch({ type: "add_user_message", message: userMsg })
-      await api.sendMessage(sessionId, content)
+
+      try {
+        if (!sessionIdRef.current) {
+          // First message — create session
+          const { sessionId: newId } = await api.createSession(model, content)
+          onSessionCreated?.(newId)
+        } else {
+          // Follow-up message — send to existing session
+          await api.sendMessage(sessionIdRef.current, content, model)
+        }
+      } catch (err) {
+        console.error("Failed to send message:", err)
+        dispatch({ type: "stop_streaming" })
+      }
     },
-    [sessionId]
+    [model, onSessionCreated]
   )
 
   const respondPermission = useCallback(
     async (requestId: string, allow: boolean) => {
-      if (!sessionId) return
-      await api.respondPermission(sessionId, requestId, allow)
-      dispatch({ type: "permission_resolved", requestId })
+      if (!sessionIdRef.current) return
+      try {
+        await api.respondPermission(sessionIdRef.current, requestId, allow)
+        dispatch({ type: "permission_resolved", requestId })
+      } catch (err) {
+        console.error("Failed to respond to permission:", err)
+      }
     },
-    [sessionId]
+    []
   )
 
   const stop = useCallback(async () => {
-    if (!sessionId) return
-    await api.stopSession(sessionId)
+    if (!sessionIdRef.current) return
+    try {
+      await api.stopSession(sessionIdRef.current)
+    } catch (err) {
+      console.error("Failed to stop session:", err)
+    }
     dispatch({ type: "stop_streaming" })
-  }, [sessionId])
+  }, [])
 
   const clear = useCallback(() => {
     dispatch({ type: "clear" })

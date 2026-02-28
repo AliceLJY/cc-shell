@@ -20,8 +20,17 @@ function App() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [themePickerOpen, setThemePickerOpen] = useState(false)
   const [sessionsLoading, setSessionsLoading] = useState(true)
+  // "pending" = user clicked New Chat but hasn't sent first message yet
+  const [pendingNewChat, setPendingNewChat] = useState(false)
 
-  const session = useSession(activeSessionId)
+  const handleSessionCreated = useCallback((newId: string) => {
+    setActiveSessionId(newId)
+    setPendingNewChat(false)
+    // Refresh session list
+    api.fetchSessions().then(setSessions).catch(() => {})
+  }, [])
+
+  const session = useSession(activeSessionId, handleSessionCreated)
   const currentTheme = themes.find((t) => t.id === themeState.currentThemeId) || themes[0]
 
   // Load sessions on mount
@@ -50,22 +59,20 @@ function App() {
     setThemeState(newState)
   }, [themeState])
 
-  const handleNewSession = useCallback(async () => {
-    try {
-      const { sessionId } = await api.createSession(session.model)
-      setActiveSessionId(sessionId)
-      handleRotate()
-      // Refresh session list
-      api.fetchSessions().then(setSessions).catch(() => {})
-    } catch (err) {
-      console.error("Failed to create session:", err)
-    }
-  }, [session.model, handleRotate])
+  const handleNewSession = useCallback(() => {
+    session.clear()
+    setActiveSessionId(null)
+    setPendingNewChat(true)
+    handleRotate()
+  }, [session.clear, handleRotate])
 
   const handleSwitchSession = useCallback((id: string) => {
     session.clear()
+    setPendingNewChat(false)
     setActiveSessionId(id)
-  }, [session])
+  }, [session.clear])
+
+  const showChat = activeSessionId !== null || pendingNewChat
 
   return (
     <ThemeProvider
@@ -101,7 +108,7 @@ function App() {
           />
         }
       >
-        {activeSessionId ? (
+        {showChat ? (
           <ChatView
             messages={session.messages}
             streamingText={session.streamingText}
