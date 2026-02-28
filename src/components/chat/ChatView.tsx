@@ -1,5 +1,6 @@
 import { MessageList } from "./MessageList"
 import { MessageInput } from "./MessageInput"
+import { CopyToolbar } from "./CopyToolbar"
 import type { ChatMessage, PermissionRequest } from "@/types"
 
 interface ChatViewProps {
@@ -27,6 +28,7 @@ export function ChatView({
 }: ChatViewProps) {
   return (
     <div className="flex flex-col h-full">
+      <CopyToolbar />
       <MessageList
         messages={messages}
         streamingText={streamingText}
