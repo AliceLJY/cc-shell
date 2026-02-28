@@ -227,6 +227,7 @@ const corsHeaders = {
 
 const server = Bun.serve({
   port: 3001,
+  idleTimeout: 255, // Max value — SSE connections must stay open
   fetch: async (req) => {
     const url = new URL(req.url)
     const { pathname } = url
