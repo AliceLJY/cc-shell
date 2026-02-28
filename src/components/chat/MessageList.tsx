@@ -1,17 +1,20 @@
 import { UserBubble } from "./UserBubble"
 import { AssistantBubble } from "./AssistantBubble"
 import { SystemMessage } from "./SystemMessage"
+import { PermissionCard } from "./PermissionCard"
 import { useAutoScroll } from "@/hooks/useAutoScroll"
-import type { ChatMessage } from "@/types"
+import type { ChatMessage, PermissionRequest } from "@/types"
 
 interface MessageListProps {
   messages: ChatMessage[]
   streamingText: string
   isStreaming: boolean
+  pendingPermissions: PermissionRequest[]
+  onRespondPermission: (requestId: string, allow: boolean) => void
 }
 
-export function MessageList({ messages, streamingText, isStreaming }: MessageListProps) {
-  const { scrollRef, handleScroll } = useAutoScroll([messages, streamingText])
+export function MessageList({ messages, streamingText, isStreaming, pendingPermissions, onRespondPermission }: MessageListProps) {
+  const { scrollRef, handleScroll } = useAutoScroll([messages, streamingText, pendingPermissions])
 
   return (
     <div
@@ -31,6 +34,15 @@ export function MessageList({ messages, streamingText, isStreaming }: MessageLis
             return null
         }
       })}
+
+      {/* Permission cards */}
+      {pendingPermissions.map((req) => (
+        <PermissionCard
+          key={req.requestId}
+          request={req}
+          onRespond={onRespondPermission}
+        />
+      ))}
 
       {/* Streaming indicator */}
       {isStreaming && streamingText && (

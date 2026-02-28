@@ -104,6 +104,8 @@ function App() {
             onModelChange={session.setModel}
             onSend={session.sendMessage}
             onStop={session.stop}
+            pendingPermissions={session.pendingPermissions}
+            onRespondPermission={session.respondPermission}
           />
         ) : (
           <div
