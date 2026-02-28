@@ -120,5 +120,43 @@
     }
   body {
     @apply bg-background text-foreground;
+    margin: 0;
+    overflow: hidden;
     }
+}
+
+/* Smooth theme transitions */
+* {
+  transition-property: background-color, border-color, color;
+  transition-duration: 0.2s;
+  transition-timing-function: ease-in-out;
+}
+
+/* Override for elements that shouldn't transition */
+textarea, input, pre, code {
+  transition: none;
+}
+
+/* Prose overrides for theme colors */
+.prose {
+  --tw-prose-body: var(--theme-aiText);
+  --tw-prose-headings: var(--theme-aiText);
+  --tw-prose-links: var(--theme-accent);
+  --tw-prose-code: var(--theme-accent);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--theme-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--theme-muted);
 }

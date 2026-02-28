@@ -8,6 +8,7 @@ interface SidebarProps {
   activeSessionId: string | null
   onNewSession: () => void
   onSelectSession: (id: string) => void
+  loading?: boolean
 }
 
 function formatRelativeTime(ts: number): string {
@@ -41,7 +42,26 @@ function groupSessions(sessions: SessionInfo[]) {
   return groups.filter((g) => g.items.length > 0)
 }
 
-export function Sidebar({ sessions, activeSessionId, onNewSession, onSelectSession }: SidebarProps) {
+function SkeletonList() {
+  return (
+    <div className="px-2 space-y-2">
+      {[1, 2, 3, 4].map((i) => (
+        <div key={i} className="px-2 py-2 space-y-1.5">
+          <div
+            className="h-3.5 rounded animate-pulse"
+            style={{ backgroundColor: "var(--theme-border)", width: `${60 + i * 8}%` }}
+          />
+          <div
+            className="h-2.5 rounded animate-pulse"
+            style={{ backgroundColor: "var(--theme-border)", width: "40%" }}
+          />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+export function Sidebar({ sessions, activeSessionId, onNewSession, onSelectSession, loading }: SidebarProps) {
   const groups = groupSessions(sessions)
 
   return (
@@ -65,38 +85,46 @@ export function Sidebar({ sessions, activeSessionId, onNewSession, onSelectSessi
 
       {/* Session list */}
       <ScrollArea className="flex-1 px-2">
-        {groups.map((group) => (
-          <div key={group.label} className="mb-3">
-            <div
-              className="text-xs font-medium px-2 py-1 uppercase tracking-wider"
-              style={{ color: "var(--theme-muted)" }}
-            >
-              {group.label}
-            </div>
-            {group.items.map((session) => {
-              const isActive = session.sessionId === activeSessionId
-              return (
-                <button
-                  key={session.sessionId}
-                  onClick={() => onSelectSession(session.sessionId)}
-                  className="w-full text-left px-2 py-2 rounded-md text-sm truncate block transition-colors"
-                  style={{
-                    backgroundColor: isActive ? "var(--theme-accent)" + "22" : "transparent",
-                    color: isActive ? "var(--theme-accent)" : "var(--theme-aiText)",
-                    borderLeft: isActive ? `3px solid var(--theme-accent)` : "3px solid transparent",
-                  }}
-                >
-                  <div className="truncate">
-                    {(session.firstPrompt || session.summary || "Untitled").slice(0, 30)}
-                  </div>
-                  <div className="text-xs mt-0.5" style={{ color: "var(--theme-muted)" }}>
-                    {formatRelativeTime(session.lastModified)}
-                  </div>
-                </button>
-              )
-            })}
+        {loading ? (
+          <SkeletonList />
+        ) : groups.length === 0 ? (
+          <div className="text-center text-xs py-8" style={{ color: "var(--theme-muted)" }}>
+            No sessions yet
           </div>
-        ))}
+        ) : (
+          groups.map((group) => (
+            <div key={group.label} className="mb-3">
+              <div
+                className="text-xs font-medium px-2 py-1 uppercase tracking-wider"
+                style={{ color: "var(--theme-muted)" }}
+              >
+                {group.label}
+              </div>
+              {group.items.map((session) => {
+                const isActive = session.sessionId === activeSessionId
+                return (
+                  <button
+                    key={session.sessionId}
+                    onClick={() => onSelectSession(session.sessionId)}
+                    className="w-full text-left px-2 py-2 rounded-md text-sm truncate block transition-colors"
+                    style={{
+                      backgroundColor: isActive ? "var(--theme-accent)" + "22" : "transparent",
+                      color: isActive ? "var(--theme-accent)" : "var(--theme-aiText)",
+                      borderLeft: isActive ? `3px solid var(--theme-accent)` : "3px solid transparent",
+                    }}
+                  >
+                    <div className="truncate">
+                      {(session.firstPrompt || session.summary || "Untitled").slice(0, 30)}
+                    </div>
+                    <div className="text-xs mt-0.5" style={{ color: "var(--theme-muted)" }}>
+                      {formatRelativeTime(session.lastModified)}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          ))
+        )}
       </ScrollArea>
     </div>
   )

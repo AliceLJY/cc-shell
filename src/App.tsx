@@ -19,13 +19,18 @@ function App() {
   const [sessions, setSessions] = useState<SessionInfo[]>([])
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [themePickerOpen, setThemePickerOpen] = useState(false)
+  const [sessionsLoading, setSessionsLoading] = useState(true)
 
   const session = useSession(activeSessionId)
   const currentTheme = themes.find((t) => t.id === themeState.currentThemeId) || themes[0]
 
   // Load sessions on mount
   useEffect(() => {
-    api.fetchSessions().then(setSessions).catch(() => {})
+    setSessionsLoading(true)
+    api.fetchSessions()
+      .then(setSessions)
+      .catch(() => {})
+      .finally(() => setSessionsLoading(false))
   }, [])
 
   const handleSetTheme = useCallback((id: number) => {
@@ -78,6 +83,7 @@ function App() {
             activeSessionId={activeSessionId}
             onNewSession={handleNewSession}
             onSelectSession={handleSwitchSession}
+            loading={sessionsLoading}
           />
         }
         topBar={
