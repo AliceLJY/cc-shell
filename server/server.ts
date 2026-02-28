@@ -189,6 +189,23 @@ async function processQuery(session: ActiveSession, prompt: string, resumeId?: s
   }
 }
 
+// Get or create an ActiveSession for the given ID (supports resuming historical sessions)
+function getOrCreateSession(sessionId: string, model = "claude-sonnet-4-6"): ActiveSession {
+  let session = activeSessions.get(sessionId)
+  if (!session) {
+    session = {
+      sessionId,
+      sseControllers: new Set(),
+      pendingPermissions: new Map(),
+      isProcessing: false,
+      model,
+      eventBuffer: [],
+    }
+    activeSessions.set(sessionId, session)
+  }
+  return session
+}
+
 function extractSessionId(pathname: string): string | null {
   const match = pathname.match(/^\/api\/sessions\/([^/]+)/)
   return match ? match[1] : null
@@ -326,25 +343,23 @@ const server = Bun.serve({
 
     // GET /api/sessions/:id/stream — SSE endpoint
     if (pathname.endsWith("/stream") && method === "GET") {
-      if (!session) {
-        return new Response("Session not found", { status: 404, headers: corsHeaders })
-      }
+      const sseSession = getOrCreateSession(sessionId)
 
       const stream = new ReadableStream({
         start(controller) {
-          session.sseControllers.add(controller)
+          sseSession.sseControllers.add(controller)
           // Flush any buffered events from before SSE connected
-          flushEventBuffer(session, controller)
+          flushEventBuffer(sseSession, controller)
           // Send current state
           const payload = `event: system_init\ndata: ${JSON.stringify({
             type: "system_init",
-            sessionId: session.sessionId,
-            model: session.model,
+            sessionId: sseSession.sessionId,
+            model: sseSession.model,
           })}\n\n`
           controller.enqueue(new TextEncoder().encode(payload))
         },
         cancel(controller) {
-          session.sseControllers.delete(controller as ReadableStreamDefaultController)
+          sseSession.sseControllers.delete(controller as ReadableStreamDefaultController)
         },
       })
 
@@ -358,31 +373,30 @@ const server = Bun.serve({
       })
     }
 
-    // POST /api/sessions/:id/msg — send follow-up message
+    // POST /api/sessions/:id/msg — send follow-up message (also works for historical sessions)
     if (pathname.endsWith("/msg") && method === "POST") {
-      if (!session) {
-        return new Response("Session not found", { status: 404, headers: corsHeaders })
-      }
-      if (session.isProcessing) {
-        return Response.json(
-          { error: "Session is busy processing a previous message" },
-          { status: 409, headers: corsHeaders }
-        )
-      }
-
       const body = await readBody(req)
       const content = body.content as string
       if (!content) {
         return Response.json({ error: "content required" }, { status: 400, headers: corsHeaders })
       }
 
+      const msgSession = getOrCreateSession(sessionId, (body.model as string) || "claude-sonnet-4-6")
+
+      if (msgSession.isProcessing) {
+        return Response.json(
+          { error: "Session is busy processing a previous message" },
+          { status: 409, headers: corsHeaders }
+        )
+      }
+
       // Update model if provided
       if (body.model) {
-        session.model = body.model as string
+        msgSession.model = body.model as string
       }
 
       // Start a new query with resume to continue the conversation
-      processQuery(session, content, session.sessionId)
+      processQuery(msgSession, content, sessionId)
 
       return Response.json({ ok: true }, { headers: corsHeaders })
     }
