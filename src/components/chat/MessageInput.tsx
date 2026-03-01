@@ -39,9 +39,13 @@ export function MessageInput({ onSend, onStop, isStreaming, model, onModelChange
   }, [text, isStreaming, onSend])
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault()
       handleSend()
+    }
+    if (e.key === "Escape" && isStreaming) {
+      e.preventDefault()
+      onStop()
     }
   }
 
@@ -55,87 +59,96 @@ export function MessageInput({ onSend, onStop, isStreaming, model, onModelChange
 
   return (
     <div
-      className="flex items-end gap-2 p-3"
       style={{ borderTop: "1px solid var(--theme-border)", backgroundColor: "var(--theme-surface)" }}
     >
-      {/* Model selector */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
+      <div className="flex items-end gap-2 px-3 pt-3 pb-1">
+        {/* Model selector */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1 h-8 shrink-0"
+              style={{ color: "var(--theme-muted)" }}
+            >
+              <span
+                className="w-2 h-2 rounded-full"
+                style={{ backgroundColor: currentModel.color }}
+              />
+              <span className="text-xs">{currentModel.label}</span>
+              <ChevronDown className="h-3 w-3" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            style={{
+              backgroundColor: "var(--theme-surface)",
+              borderColor: "var(--theme-border)",
+            }}
+          >
+            {MODELS.map((m) => (
+              <DropdownMenuItem
+                key={m.id}
+                onClick={() => onModelChange(m.id)}
+                className="gap-2"
+                style={{ color: "var(--theme-aiText)" }}
+              >
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: m.color }} />
+                {m.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Text input */}
+        <textarea
+          ref={textareaRef}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onInput={handleInput}
+          placeholder="Send a message..."
+          rows={1}
+          className="flex-1 resize-none bg-transparent outline-none text-sm py-2 px-3 rounded-lg"
+          style={{
+            backgroundColor: "var(--theme-input)",
+            color: "var(--theme-aiText)",
+            border: "1px solid var(--theme-border)",
+            maxHeight: "144px",
+          }}
+        />
+
+        {/* Send / Stop button */}
+        {isStreaming ? (
           <Button
             variant="ghost"
-            size="sm"
-            className="gap-1 h-8 shrink-0"
-            style={{ color: "var(--theme-muted)" }}
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            onClick={onStop}
+            style={{ color: "var(--theme-accent)" }}
           >
-            <span
-              className="w-2 h-2 rounded-full"
-              style={{ backgroundColor: currentModel.color }}
-            />
-            <span className="text-xs">{currentModel.label}</span>
-            <ChevronDown className="h-3 w-3" />
+            <Square className="h-4 w-4" />
           </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          style={{
-            backgroundColor: "var(--theme-surface)",
-            borderColor: "var(--theme-border)",
-          }}
-        >
-          {MODELS.map((m) => (
-            <DropdownMenuItem
-              key={m.id}
-              onClick={() => onModelChange(m.id)}
-              className="gap-2"
-              style={{ color: "var(--theme-aiText)" }}
-            >
-              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: m.color }} />
-              {m.label}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
+        ) : (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            onClick={handleSend}
+            disabled={!text.trim()}
+            style={{ color: text.trim() ? "var(--theme-accent)" : "var(--theme-muted)" }}
+          >
+            <ArrowUp className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
 
-      {/* Text input */}
-      <textarea
-        ref={textareaRef}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={handleKeyDown}
-        onInput={handleInput}
-        placeholder="Send a message..."
-        rows={1}
-        className="flex-1 resize-none bg-transparent outline-none text-sm py-2 px-3 rounded-lg"
-        style={{
-          backgroundColor: "var(--theme-input)",
-          color: "var(--theme-aiText)",
-          border: "1px solid var(--theme-border)",
-          maxHeight: "144px",
-        }}
-      />
-
-      {/* Send / Stop button */}
-      {isStreaming ? (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 shrink-0"
-          onClick={onStop}
-          style={{ color: "var(--theme-accent)" }}
-        >
-          <Square className="h-4 w-4" />
-        </Button>
-      ) : (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 shrink-0"
-          onClick={handleSend}
-          disabled={!text.trim()}
-          style={{ color: text.trim() ? "var(--theme-accent)" : "var(--theme-muted)" }}
-        >
-          <ArrowUp className="h-4 w-4" />
-        </Button>
-      )}
+      {/* Keyboard shortcut hint */}
+      <div
+        className="text-right px-3 pb-2"
+        style={{ color: "var(--theme-muted)", fontSize: "11px" }}
+      >
+        &#x2318;&#x21B5; send &middot; Esc stop
+      </div>
     </div>
   )
 }

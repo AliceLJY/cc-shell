@@ -23,11 +23,11 @@ export async function createSession(model: string, prompt: string): Promise<{ se
   })
 }
 
-export async function sendMessage(sessionId: string, content: string, model?: string): Promise<void> {
+export async function sendMessage(sessionId: string, content: string, model?: string, cwd?: string): Promise<void> {
   await jsonFetch(`${BASE}/sessions/${sessionId}/msg`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content, model }),
+    body: JSON.stringify({ content, model, cwd }),
   })
 }
 

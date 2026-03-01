@@ -5,21 +5,11 @@ interface StatusBarProps {
   connected: boolean
 }
 
-function formatTokens(n: number): string {
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
-  return String(n)
-}
-
-export function StatusBar({ inputTokens, outputTokens, cost, connected }: StatusBarProps) {
+export function StatusBar({ cost, connected }: StatusBarProps) {
   return (
     <div className="flex items-center justify-between w-full">
-      {/* Left: Token usage */}
-      <div>
-        {formatTokens(inputTokens)} in / {formatTokens(outputTokens)} out
-      </div>
-
-      {/* Center: Cost */}
-      <div>${cost.toFixed(4)}</div>
+      {/* Left: Cost (only show when > 0) */}
+      <div>{cost > 0 ? `$${cost.toFixed(4)}` : ""}</div>
 
       {/* Right: Connection status */}
       <div className="flex items-center gap-1.5">

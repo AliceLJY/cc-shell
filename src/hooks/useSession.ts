@@ -84,13 +84,31 @@ interface UseSessionCallbacks {
   onQueryComplete?: () => void
 }
 
-export function useSession(sessionId: string | null, callbacks?: UseSessionCallbacks) {
+export function useSession(sessionId: string | null, cwd: string | undefined, callbacks?: UseSessionCallbacks) {
   const onSessionCreated = callbacks?.onSessionCreated
   const onQueryComplete = callbacks?.onQueryComplete
   const [state, dispatch] = useReducer(sessionReducer, initialState)
   const [model, setModel] = useState("claude-sonnet-4-6")
   const sessionIdRef = useRef(sessionId)
   sessionIdRef.current = sessionId
+
+  // Browser notification support
+  const notificationPermissionRef = useRef<NotificationPermission>("default")
+  const queryStartTimeRef = useRef<number | null>(null)
+  const lastAssistantTextRef = useRef<string>("")
+
+  // Request notification permission once on mount
+  useEffect(() => {
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      Notification.requestPermission().then((perm) => {
+        notificationPermissionRef.current = perm
+      }).catch(() => {
+        // User denied or browser blocked — silently ignore
+      })
+    } else if (typeof Notification !== "undefined") {
+      notificationPermissionRef.current = Notification.permission
+    }
+  }, [])
 
   // Load historical messages when switching to a session
   useEffect(() => {
@@ -122,14 +140,36 @@ export function useSession(sessionId: string | null, callbacks?: UseSessionCallb
         break
       case "assistant_message":
         dispatch({ type: "assistant_message", message: event.message })
+        // Capture latest assistant text for notification preview
+        if (typeof event.message.content === "string") {
+          lastAssistantTextRef.current = event.message.content
+        }
         break
       case "permission_request":
         dispatch({ type: "permission_request", request: event.request })
         break
-      case "result":
+      case "result": {
         dispatch({ type: "result", usage: event.usage, cost: event.cost, duration: event.duration })
         onQueryComplete?.()
+
+        // Browser notification when tab is not visible and query took > 5s
+        const elapsed = queryStartTimeRef.current ? Date.now() - queryStartTimeRef.current : 0
+        queryStartTimeRef.current = null
+        if (
+          elapsed > 5000 &&
+          typeof document !== "undefined" && document.hidden &&
+          typeof Notification !== "undefined" && notificationPermissionRef.current === "granted"
+        ) {
+          const preview = lastAssistantTextRef.current.slice(0, 50)
+          const body = preview ? `查询已完成: ${preview}${lastAssistantTextRef.current.length > 50 ? "..." : ""}` : "查询已完成"
+          const notification = new Notification("CC Shell", { body })
+          notification.onclick = () => {
+            window.focus()
+            notification.close()
+          }
+        }
         break
+      }
       case "error":
         dispatch({ type: "stop_streaming" })
         break
@@ -140,6 +180,8 @@ export function useSession(sessionId: string | null, callbacks?: UseSessionCallb
 
   const sendMessage = useCallback(
     async (content: string) => {
+      queryStartTimeRef.current = Date.now()
+      lastAssistantTextRef.current = ""
       const userMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: "user",
@@ -154,15 +196,26 @@ export function useSession(sessionId: string | null, callbacks?: UseSessionCallb
           const { sessionId: newId } = await api.createSession(model, content)
           onSessionCreated?.(newId)
         } else {
-          // Follow-up message — send to existing session
-          await api.sendMessage(sessionIdRef.current, content, model)
+          // Follow-up message — send to existing session (pass cwd for cross-project resume)
+          await api.sendMessage(sessionIdRef.current, content, model, cwd)
         }
       } catch (err) {
-        console.error("Failed to send message:", err)
+        const errMsg = err instanceof Error ? err.message : "Unknown error"
+        console.error("Failed to send message:", errMsg)
+        // Show error as a system message so user knows what happened
+        dispatch({
+          type: "assistant_message",
+          message: {
+            id: crypto.randomUUID(),
+            role: "system" as const,
+            content: errMsg.includes("busy") ? "⚠️ 上一条消息还在处理中，请稍后再试" : `⚠️ 发送失败: ${errMsg}`,
+            timestamp: Date.now(),
+          },
+        })
         dispatch({ type: "stop_streaming" })
       }
     },
-    [model, onSessionCreated]
+    [model, cwd, onSessionCreated]
   )
 
   const respondPermission = useCallback(

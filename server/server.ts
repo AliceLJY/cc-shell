@@ -6,7 +6,9 @@ interface ActiveSession {
   sseControllers: Set<ReadableStreamDefaultController>
   pendingPermissions: Map<string, (result: { behavior: "allow" | "deny"; message?: string }) => void>
   isProcessing: boolean
+  abortController?: AbortController // For cancelling in-flight queries
   model: string
+  cwd?: string // Original working directory of the session
   eventBuffer: Uint8Array[] // Buffer events until first SSE controller connects
 }
 
@@ -21,16 +23,22 @@ function sendSSE(session: ActiveSession, event: string, data: unknown) {
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
   const encoded = new TextEncoder().encode(payload)
   if (session.sseControllers.size === 0) {
-    // No SSE clients connected yet — buffer the event
+    // No SSE clients connected — buffer the event
     session.eventBuffer.push(encoded)
     return
   }
+  let delivered = false
   for (const controller of session.sseControllers) {
     try {
       controller.enqueue(encoded)
+      delivered = true
     } catch {
       session.sseControllers.delete(controller)
     }
+  }
+  // If all controllers failed, re-buffer so new connections can receive it
+  if (!delivered) {
+    session.eventBuffer.push(encoded)
   }
 }
 
@@ -48,6 +56,10 @@ function flushEventBuffer(session: ActiveSession, controller: ReadableStreamDefa
 // Process a query and stream results via SSE
 async function processQuery(session: ActiveSession, prompt: string, resumeId?: string) {
   session.isProcessing = true
+  const ac = new AbortController()
+  session.abortController = ac
+  const t0 = Date.now()
+  console.log(`[processQuery] START session=${session.sessionId} resume=${resumeId ?? "none"} prompt="${prompt.slice(0, 50)}" sseClients=${session.sseControllers.size}`)
   sendSSE(session, "status", { type: "status", text: "Claude is thinking..." })
 
   try {
@@ -57,6 +69,8 @@ async function processQuery(session: ActiveSession, prompt: string, resumeId?: s
         model: session.model,
         env: cleanEnv,
         ...(resumeId ? { resume: resumeId } : {}),
+        ...(session.cwd ? { cwd: session.cwd } : {}),
+        signal: ac.signal,
         includePartialMessages: true,
         permissionMode: "default",
         canUseTool: async (toolName, input, opts) => {
@@ -81,6 +95,10 @@ async function processQuery(session: ActiveSession, prompt: string, resumeId?: s
     let sdkSessionResolved = false
 
     for await (const msg of q) {
+      // Log non-stream events with timing
+      if (msg.type !== "stream_event") {
+        console.log(`[SDK +${Date.now() - t0}ms] msgType=${msg.type} session=${session.sessionId}`)
+      }
       // Capture real session ID from SDK messages (first time only)
       if (msg.session_id && !sdkSessionResolved) {
         sdkSessionResolved = true
@@ -183,9 +201,13 @@ async function processQuery(session: ActiveSession, prompt: string, resumeId?: s
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error"
+    console.error(`[processQuery] ERROR session=${session.sessionId} resume=${resumeId ?? "none"}: ${message}`)
+    if (err instanceof Error && err.stack) console.error(err.stack)
     sendSSE(session, "error", { type: "error", message })
   } finally {
+    console.log(`[processQuery] DONE +${Date.now() - t0}ms session=${session.sessionId} resume=${resumeId ?? "none"} sseClients=${session.sseControllers.size}`)
     session.isProcessing = false
+    session.abortController = undefined
   }
 }
 
@@ -232,6 +254,11 @@ const server = Bun.serve({
     const url = new URL(req.url)
     const { pathname } = url
     const method = req.method
+
+    // Log all non-OPTIONS requests
+    if (method !== "OPTIONS" && !pathname.endsWith("/stream")) {
+      console.log(`[HTTP] ${method} ${pathname}`)
+    }
 
     if (method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders })
@@ -308,6 +335,11 @@ const server = Bun.serve({
     // GET /api/sessions/:id/messages — load historical messages
     if (pathname.endsWith("/messages") && method === "GET") {
       try {
+        // Get session's lastModified as fallback timestamp (SDK doesn't provide per-message timestamps)
+        const allSessions = await listSessions()
+        const sessionInfo = allSessions.find((s) => s.sessionId === sessionId)
+        const fallbackTs = sessionInfo?.lastModified ?? 0
+
         const msgs = await getSessionMessages(sessionId)
         const result = msgs.map((m) => {
           let content = ""
@@ -329,7 +361,7 @@ const server = Bun.serve({
             id: m.uuid,
             role: m.type as "user" | "assistant",
             content,
-            timestamp: 0, // SDK doesn't provide timestamps
+            timestamp: fallbackTs,
             toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
           }
         })
@@ -344,6 +376,7 @@ const server = Bun.serve({
 
     // GET /api/sessions/:id/stream — SSE endpoint
     if (pathname.endsWith("/stream") && method === "GET") {
+      console.log(`[SSE] CONNECT sessionId=${sessionId}`)
       const sseSession = getOrCreateSession(sessionId)
 
       const stream = new ReadableStream({
@@ -383,8 +416,14 @@ const server = Bun.serve({
       }
 
       const msgSession = getOrCreateSession(sessionId, (body.model as string) || "claude-sonnet-4-6")
+      // Store cwd if provided (for resuming historical sessions from different directories)
+      if (body.cwd && typeof body.cwd === "string") {
+        msgSession.cwd = body.cwd
+      }
+      console.log(`[MSG] sessionId=${sessionId} content="${content.slice(0, 50)}" cwd=${msgSession.cwd ?? "default"} isProcessing=${msgSession.isProcessing} sseClients=${msgSession.sseControllers.size}`)
 
       if (msgSession.isProcessing) {
+        console.log(`[MSG] REJECTED — session busy`)
         return Response.json(
           { error: "Session is busy processing a previous message" },
           { status: 409, headers: corsHeaders }
@@ -431,11 +470,18 @@ const server = Bun.serve({
       if (!session) {
         return new Response("Session not found", { status: 404, headers: corsHeaders })
       }
+      console.log(`[STOP] sessionId=${sessionId} isProcessing=${session.isProcessing}`)
+      // Abort the running query
+      if (session.abortController) {
+        session.abortController.abort()
+        session.abortController = undefined
+      }
       // Close all pending permissions with deny to unblock the query
       for (const [id, resolver] of session.pendingPermissions) {
         resolver({ behavior: "deny", message: "Session stopped by user" })
         session.pendingPermissions.delete(id)
       }
+      session.isProcessing = false
       return Response.json({ ok: true }, { headers: corsHeaders })
     }
 

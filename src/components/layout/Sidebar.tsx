@@ -1,4 +1,5 @@
-import { Plus } from "lucide-react"
+import { useState, useRef, useEffect, useCallback } from "react"
+import { Plus, Search, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { SessionInfo } from "@/types"
@@ -9,6 +10,30 @@ interface SidebarProps {
   onNewSession: () => void
   onSelectSession: (id: string) => void
   loading?: boolean
+}
+
+const RENAME_KEY_PREFIX = "cc-shell-session-name-"
+
+function getCustomName(sessionId: string): string | null {
+  try {
+    return localStorage.getItem(RENAME_KEY_PREFIX + sessionId)
+  } catch {
+    return null
+  }
+}
+
+function setCustomName(sessionId: string, name: string) {
+  try {
+    localStorage.setItem(RENAME_KEY_PREFIX + sessionId, name)
+  } catch {
+    // localStorage may be full or unavailable
+  }
+}
+
+function getDisplayName(session: SessionInfo): string {
+  const custom = getCustomName(session.sessionId)
+  if (custom) return custom
+  return (session.summary || session.firstPrompt || "Untitled").slice(0, 30)
 }
 
 function formatRelativeTime(ts: number): string {
@@ -61,13 +86,118 @@ function SkeletonList() {
   )
 }
 
+// --- Inline editable session name ---
+
+interface SessionItemProps {
+  session: SessionInfo
+  isActive: boolean
+  onSelect: () => void
+}
+
+function SessionItem({ session, isActive, onSelect }: SessionItemProps) {
+  const [editing, setEditing] = useState(false)
+  const [editValue, setEditValue] = useState("")
+  const inputRef = useRef<HTMLInputElement>(null)
+  const displayName = getDisplayName(session)
+
+  const startEditing = useCallback(() => {
+    setEditValue(displayName)
+    setEditing(true)
+  }, [displayName])
+
+  const saveEdit = useCallback(() => {
+    const trimmed = editValue.trim()
+    if (trimmed && trimmed !== displayName) {
+      setCustomName(session.sessionId, trimmed)
+    }
+    // If empty, don't save (revert to original)
+    setEditing(false)
+  }, [editValue, displayName, session.sessionId])
+
+  const cancelEdit = useCallback(() => {
+    setEditing(false)
+  }, [])
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus()
+      inputRef.current.select()
+    }
+  }, [editing])
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault()
+      saveEdit()
+    } else if (e.key === "Escape") {
+      e.preventDefault()
+      cancelEdit()
+    }
+  }
+
+  return (
+    <button
+      onClick={onSelect}
+      onDoubleClick={(e) => {
+        e.preventDefault()
+        startEditing()
+      }}
+      className="w-full text-left px-2 py-2 rounded-md text-sm truncate block transition-colors"
+      style={{
+        backgroundColor: isActive ? "var(--theme-accent)" + "22" : "transparent",
+        color: isActive ? "var(--theme-accent)" : "var(--theme-aiText)",
+        borderLeft: isActive ? `3px solid var(--theme-accent)` : "3px solid transparent",
+      }}
+    >
+      {editing ? (
+        <input
+          ref={inputRef}
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onBlur={saveEdit}
+          onKeyDown={handleKeyDown}
+          onClick={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
+          className="w-full text-sm rounded px-1 py-0.5 outline-none"
+          style={{
+            backgroundColor: "var(--theme-input)",
+            border: "1px solid var(--theme-border)",
+            color: "var(--theme-aiText)",
+          }}
+        />
+      ) : (
+        <div className="truncate">{displayName}</div>
+      )}
+      <div className="text-xs mt-0.5" style={{ color: "var(--theme-muted)" }}>
+        {formatRelativeTime(session.lastModified)}
+      </div>
+    </button>
+  )
+}
+
+// --- Main Sidebar ---
+
 export function Sidebar({ sessions, activeSessionId, onNewSession, onSelectSession, loading }: SidebarProps) {
-  const groups = groupSessions(sessions)
+  const [searchQuery, setSearchQuery] = useState("")
+
+  // Filter sessions by search query (case-insensitive, match summary or firstPrompt or custom name)
+  const filteredSessions = searchQuery.trim()
+    ? sessions.filter((s) => {
+        const q = searchQuery.toLowerCase()
+        const custom = getCustomName(s.sessionId)
+        const summary = s.summary?.toLowerCase() || ""
+        const firstPrompt = s.firstPrompt?.toLowerCase() || ""
+        const customLower = custom?.toLowerCase() || ""
+        return summary.includes(q) || firstPrompt.includes(q) || customLower.includes(q)
+      })
+    : sessions
+
+  const groups = groupSessions(filteredSessions)
 
   return (
     <div className="flex flex-col h-full">
       {/* New chat button */}
-      <div className="p-3">
+      <div className="p-3 pb-2">
         <Button
           className="w-full justify-start gap-2"
           variant="outline"
@@ -83,13 +213,44 @@ export function Sidebar({ sessions, activeSessionId, onNewSession, onSelectSessi
         </Button>
       </div>
 
+      {/* Search box */}
+      <div className="px-3 pb-2">
+        <div className="relative">
+          <Search
+            className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 pointer-events-none"
+            style={{ color: "var(--theme-muted)" }}
+          />
+          <input
+            type="text"
+            placeholder="Search sessions..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full text-sm rounded-md pl-7 pr-7 py-1.5 outline-none transition-colors"
+            style={{
+              backgroundColor: "var(--theme-input)",
+              border: "1px solid var(--theme-border)",
+              color: "var(--theme-aiText)",
+            }}
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-sm p-0.5 transition-colors hover:opacity-80"
+              style={{ color: "var(--theme-muted)" }}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Session list */}
       <ScrollArea className="flex-1 px-2">
         {loading ? (
           <SkeletonList />
         ) : groups.length === 0 ? (
           <div className="text-center text-xs py-8" style={{ color: "var(--theme-muted)" }}>
-            No sessions yet
+            {searchQuery.trim() ? "No matching sessions" : "No sessions yet"}
           </div>
         ) : (
           groups.map((group) => (
@@ -100,28 +261,14 @@ export function Sidebar({ sessions, activeSessionId, onNewSession, onSelectSessi
               >
                 {group.label}
               </div>
-              {group.items.map((session) => {
-                const isActive = session.sessionId === activeSessionId
-                return (
-                  <button
-                    key={session.sessionId}
-                    onClick={() => onSelectSession(session.sessionId)}
-                    className="w-full text-left px-2 py-2 rounded-md text-sm truncate block transition-colors"
-                    style={{
-                      backgroundColor: isActive ? "var(--theme-accent)" + "22" : "transparent",
-                      color: isActive ? "var(--theme-accent)" : "var(--theme-aiText)",
-                      borderLeft: isActive ? `3px solid var(--theme-accent)` : "3px solid transparent",
-                    }}
-                  >
-                    <div className="truncate">
-                      {(session.firstPrompt || session.summary || "Untitled").slice(0, 30)}
-                    </div>
-                    <div className="text-xs mt-0.5" style={{ color: "var(--theme-muted)" }}>
-                      {formatRelativeTime(session.lastModified)}
-                    </div>
-                  </button>
-                )
-              })}
+              {group.items.map((session) => (
+                <SessionItem
+                  key={session.sessionId}
+                  session={session}
+                  isActive={session.sessionId === activeSessionId}
+                  onSelect={() => onSelectSession(session.sessionId)}
+                />
+              ))}
             </div>
           ))
         )}

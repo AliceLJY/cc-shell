@@ -32,7 +32,9 @@ function App() {
     setPendingNewChat(false)
   }, [])
 
-  const session = useSession(activeSessionId, {
+  // Find the cwd for the active session (needed for cross-project resume)
+  const activeSessionCwd = sessions.find((s) => s.sessionId === activeSessionId)?.cwd
+  const session = useSession(activeSessionId, activeSessionCwd, {
     onSessionCreated: handleSessionCreated,
     onQueryComplete: refreshSessions,
   })
