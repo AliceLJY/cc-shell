@@ -35,3 +35,29 @@ server/
 themes/
   theme-catalog.json  # 6 theme definitions
 ```
+
+## Ecosystem
+
+Part of the [AI小木屋](https://github.com/AliceLJY) toolkit:
+
+| Project | What It Does |
+|---------|-------------|
+| [content-alchemy](https://github.com/AliceLJY/content-alchemy) | 5-stage content pipeline (v5.0): Research → Writing |
+| [content-publisher](https://github.com/AliceLJY/content-publisher) | Image generation, layout formatting, and WeChat API publishing |
+| [openclaw-worker](https://github.com/AliceLJY/openclaw-worker) | Task API + Worker for bot-driven AI CLI automation |
+| [openclaw-cli-bridge](https://github.com/AliceLJY/openclaw-cli-bridge) | Discord → CC/Codex/Gemini bridge |
+| [telegram-ai-bridge](https://github.com/AliceLJY/telegram-ai-bridge) | Telegram → CC/Codex via Agent SDK |
+| [digital-clone-skill](https://github.com/AliceLJY/digital-clone-skill) | Extract writing DNA for personalized content voice |
+| [local-memory](https://github.com/AliceLJY/local-memory) | Hybrid search over AI conversation transcripts |
+
+## Author
+
+Built by **小试AI** ([@AliceLJY](https://github.com/AliceLJY)) · WeChat: **我的AI小木屋**
+
+> 医学出身，文化口工作，AI 野路子。公众号六大板块：AI实操手账 · AI踩坑实录 · AI照见众生 · AI冷眼旁观 · AI胡思乱想 · AI视觉笔记
+
+Six content pillars: **Hands-on AI** · **AI Pitfall Diaries** · **AI & Humanity** · **AI Cold Eye** · **AI Musings** · **AI Visual Notes**
+
+## License
+
+MIT
