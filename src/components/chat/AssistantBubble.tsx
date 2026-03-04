@@ -2,6 +2,7 @@ import { Children, isValidElement } from "react"
 import Markdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import rehypeRaw from "rehype-raw"
+import rehypeSanitize from "rehype-sanitize"
 import { CodeBlock } from "./CodeBlock"
 import { ToolCall } from "./ToolCall"
 import { MessageMenu } from "./MessageMenu"
@@ -44,7 +45,7 @@ export function AssistantBubble({ message }: AssistantBubbleProps) {
         >
           <Markdown
             remarkPlugins={[remarkGfm]}
-            rehypePlugins={[rehypeRaw]}
+            rehypePlugins={[rehypeRaw, rehypeSanitize]}
             components={{
               code({ className, children, ...props }) {
                 const match = /language-(\w+)/.exec(className || "")

@@ -19,11 +19,16 @@ const activeSessions = new Map<string, ActiveSession>()
 const cleanEnv: Record<string, string | undefined> = { ...process.env }
 delete cleanEnv.CLAUDECODE
 
+const MAX_EVENT_BUFFER = 500
+
 function sendSSE(session: ActiveSession, event: string, data: unknown) {
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
   const encoded = new TextEncoder().encode(payload)
   if (session.sseControllers.size === 0) {
-    // No SSE clients connected — buffer the event
+    // No SSE clients connected — buffer the event (with cap)
+    if (session.eventBuffer.length >= MAX_EVENT_BUFFER) {
+      session.eventBuffer.splice(0, session.eventBuffer.length - MAX_EVENT_BUFFER + 1)
+    }
     session.eventBuffer.push(encoded)
     return
   }
@@ -75,9 +80,18 @@ async function processQuery(session: ActiveSession, prompt: string, resumeId?: s
         permissionMode: "default",
         canUseTool: async (toolName, input, opts) => {
           const requestId = opts.toolUseID
+          const PERMISSION_TIMEOUT_MS = 60_000
           return new Promise((resolve) => {
+            const timer = setTimeout(() => {
+              session.pendingPermissions.delete(requestId)
+              sendSSE(session, "status", { type: "status", text: `Permission timed out for ${toolName}, auto-denied.` })
+              resolve({ behavior: "deny", message: "Permission request timed out (60s)" })
+            }, PERMISSION_TIMEOUT_MS)
             // Store resolver — will be resolved when frontend responds
-            session.pendingPermissions.set(requestId, resolve)
+            session.pendingPermissions.set(requestId, (result) => {
+              clearTimeout(timer)
+              resolve(result)
+            })
             sendSSE(session, "permission_request", {
               type: "permission_request",
               request: {
