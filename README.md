@@ -45,12 +45,11 @@ Part of the [AI小木屋](https://github.com/AliceLJY) toolkit:
 | [content-alchemy](https://github.com/AliceLJY/content-alchemy) | 5-stage content pipeline (v5.0): Research → Writing |
 | [content-publisher](https://github.com/AliceLJY/content-publisher) | Image generation, layout formatting, and WeChat API publishing |
 | [openclaw-worker](https://github.com/AliceLJY/openclaw-worker) | Task API + Worker for bot-driven AI CLI automation |
-| [openclaw-content-alchemy](https://github.com/AliceLJY/openclaw-content-alchemy) | Bot-native content pipeline (OpenClaw plugin) |
-| [openclaw-cli-pipeline](https://github.com/AliceLJY/openclaw-cli-pipeline) | Multi-turn CC orchestration CLI |
 | [openclaw-cli-bridge](https://github.com/AliceLJY/openclaw-cli-bridge) | Discord → CC/Codex/Gemini bridge |
 | [digital-clone-skill](https://github.com/AliceLJY/digital-clone-skill) | Extract writing DNA for personalized content voice |
 | [local-memory](https://github.com/AliceLJY/local-memory) | Hybrid search over AI conversation transcripts |
-| [telegram-ai-bridge](https://github.com/AliceLJY/telegram-ai-bridge) | Telegram → CC/Codex via Agent SDK |
+| [telegram-ai-bridge](https://github.com/AliceLJY/telegram-ai-bridge) | Telegram → CC/Codex/Gemini via Agent SDK |
+| [telegram-cli-bridge](https://github.com/AliceLJY/telegram-cli-bridge) | Telegram CLI bridge (Gemini CLI path) |
 
 ## Author
 
