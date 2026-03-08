@@ -1,8 +1,31 @@
-# CC Shell
+# CC Shell (Archived)
+
+> **This project has been archived.**
+> I no longer maintain it as an active product.
+
+CC Shell was an experiment: a lightweight shell/UI wrapper around Claude Code.
+It is no longer part of my main workflow.
+
+> 这是一个给 Claude Code 套壳的实验项目，现已归档，不再作为主力产品维护。
 
 A lightweight chat UI for Claude Code — rotating themes, clean copy, session management.
 
 > 为 Claude Code 打造的轻量聊天界面，带主题轮换、干净复制、会话管理。
+
+## Why Archived
+
+- My primary remote workflow has moved to `telegram-ai-bridge` and `telegram-cli-bridge`
+- A custom UI shell for Claude Code no longer adds enough value
+- There are already stronger and more mature tools in the same category
+
+> 归档原因：我的主工作流已经转向 `telegram-ai-bridge` 和 `telegram-cli-bridge`。继续手搓一个 CC 壳子意义不大，而且同类已有更成熟方案。
+
+## Recommended Alternatives
+
+- [telegram-ai-bridge](https://github.com/AliceLJY/telegram-ai-bridge) — Telegram bridge for Claude / Codex / Gemini via SDK
+- [telegram-cli-bridge](https://github.com/AliceLJY/telegram-cli-bridge) — Telegram bridge via task-api, especially useful when full CLI capability is needed
+
+> 替代方案：优先看 `telegram-ai-bridge` 和 `telegram-cli-bridge`。
 
 ## Quick Start
 
