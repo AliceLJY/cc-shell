@@ -67,8 +67,7 @@ Part of the [AI小木屋](https://github.com/AliceLJY) toolkit:
 |---------|-------------|
 | [content-alchemy](https://github.com/AliceLJY/content-alchemy) | 5-stage content pipeline (v5.0): Research → Writing |
 | [content-publisher](https://github.com/AliceLJY/content-publisher) | Image generation, layout formatting, and WeChat API publishing |
-| [openclaw-worker](https://github.com/AliceLJY/openclaw-worker) | Task API + Worker for bot-driven AI CLI automation |
-| [openclaw-cli-bridge](https://github.com/AliceLJY/openclaw-cli-bridge) | Discord → CC/Codex/Gemini bridge |
+| [openclaw-tunnel](https://github.com/AliceLJY/openclaw-tunnel) | Docker-to-host tunnel for `/cc`, `/codex`, `/gemini` |
 | [digital-clone-skill](https://github.com/AliceLJY/digital-clone-skill) | Extract writing DNA for personalized content voice |
 | [recallnest](https://github.com/AliceLJY/recallnest) | MCP-native memory workbench for AI conversations |
 | [telegram-ai-bridge](https://github.com/AliceLJY/telegram-ai-bridge) | Telegram → CC/Codex/Gemini via Agent SDK |
